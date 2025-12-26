@@ -3,81 +3,91 @@ import pandas as pd
 import pickle
 import xgboost
 import os
+import shap
+import streamlit.components.v1 as components
 
 # ==========================================
-# 1. Page Configuration & Custom CSS
+# 1. Page Configuration (Clean & Professional)
 # ==========================================
 st.set_page_config(
     page_title="IVF/ICSI Miscarriage Risk Prediction",
-    page_icon="⚠️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for compact layout
+# Custom CSS for compact, professional layout (No Emojis)
 st.markdown("""
     <style>
-    /* Main background color */
+    /* Global font settings */
+    html, body, [class*="css"] {
+        font-family: 'Arial', sans-serif;
+    }
+    
+    /* Main background */
     .main {
+        background-color: #ffffff;
+    }
+    
+    /* Result Card Styling - Clean & Medical */
+    .result-box {
+        padding: 15px 20px;
+        border-radius: 4px;
+        border: 1px solid #e0e0e0;
+        margin-bottom: 15px;
         background-color: #f8f9fa;
     }
     
-    /* Common Card Style (Compact) */
-    .result-card {
-        background-color: #ffffff;
-        padding: 15px;       /* Reduced padding */
-        border-radius: 8px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        margin-top: 10px;    /* Reduced margin */
-        margin-bottom: 10px;
-    }
-
-    /* Color variations */
-    .result-card-high-risk {
-        border-left: 5px solid #FF5252;
-    }
-    .result-card-low-risk {
-        border-left: 5px solid #4CAF50;
-    }
-    .result-card-moderate {
-        border-left: 5px solid #FFC107;
-    }
-
-    /* Compact Typography inside cards */
-    .compact-h3 {
-        margin-top: 0 !important;
-        margin-bottom: 5px !important;
-        font-size: 1.1rem !important;
-    }
-    .compact-h1 {
-        color: #333; 
-        margin: 0 !important;
-        font-size: 2.2rem !important;
-        line-height: 1.2 !important;
-    }
-    .compact-p {
-        color: #666; 
-        margin: 0 !important; 
-        font-size: 0.9rem !important;
-    }
-    .compact-hr {
-        margin-top: 10px !important;
-        margin-bottom: 10px !important;
+    .result-title {
+        color: #333333;
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 5px;
     }
     
-    /* Adjust Streamlit's default vertical spacing */
-    .block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 2rem !important;
+    .result-value {
+        font-size: 28px;
+        font-weight: 700;
+        color: #000000;
+        margin-bottom: 5px;
     }
+    
+    .result-desc {
+        color: #666666;
+        font-size: 14px;
+        margin-top: 5px;
+    }
+
+    /* Status Indicators (Color bars instead of emojis) */
+    .status-high {
+        border-left: 5px solid #d32f2f; /* Red */
+    }
+    .status-low {
+        border-left: 5px solid #388e3c; /* Green */
+    }
+    .status-mod {
+        border-left: 5px solid #fbc02d; /* Yellow */
+    }
+
+    /* Reduce padding to make it compact */
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-bottom: 1rem !important;
+    }
+    
+    /* Metric styling adjustment */
     div[data-testid="stMetricValue"] {
-        font-size: 1.8rem !important;
+        font-size: 1.4rem !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("⚠️ IVF/ICSI Early Miscarriage Risk Prediction")
-st.markdown("**XGBoost-based Clinical Decision Support System**")
+# Helper function to display SHAP plots
+def st_shap(plot, height=None):
+    shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
+    components.html(shap_html, height=height if height else 150)
+
+st.markdown("### IVF/ICSI Early Miscarriage Risk Prediction")
+st.markdown("XGBoost Clinical Decision Support System")
 st.markdown("---")
 
 # ==========================================
@@ -86,13 +96,12 @@ st.markdown("---")
 @st.cache_resource
 def load_model():
     model_filename = 'xgb_model.pkl'
-    
     if not os.path.exists(model_filename):
         alt_path = "2.训练集构建模型/xgb_model.pkl"
         if os.path.exists(alt_path):
             model_filename = alt_path
         else:
-            st.error(f"❌ Critical Error: Model file `{model_filename}` not found. Please upload it to the GitHub repository.")
+            st.error(f"Error: Model file '{model_filename}' not found.")
             st.stop()
         
     try:
@@ -106,54 +115,25 @@ def load_model():
 model = load_model()
 
 # ==========================================
-# 3. Sidebar: Patient Data Entry
+# 3. Sidebar: Inputs
 # ==========================================
 with st.sidebar:
-    st.header("📝 Patient Clinical Data")
+    st.markdown("#### Patient Clinical Data")
     
     with st.form("input_form"):
-        # 1. Female_age
-        female_age = st.number_input(
-            "1. Female Age (years)", 
-            min_value=20.0, max_value=55.0, value=32.0, step=1.0
-        )
+        female_age = st.number_input("Female Age (years)", 20.0, 55.0, 32.0, 1.0)
+        bmi = st.number_input("BMI (kg/m²)", 10.0, 50.0, 22.5, 0.1)
+        plt_val = st.number_input("Platelet Count (10⁹/L)", 10.0, 600.0, 250.0, 1.0)
+        fsh = st.number_input("Basal FSH (IU/L)", 0.0, 100.0, 7.5, 0.1)
+        tsh = st.number_input("TSH (mIU/L)", 0.0, 50.0, 2.0, 0.01)
         
-        # 2. BMI
-        bmi = st.number_input(
-            "2. BMI (kg/m²)", 
-            min_value=10.0, max_value=50.0, value=22.5, step=0.1,
-            help="Body Mass Index"
-        )
-        
-        # 3. PLT
-        plt_val = st.number_input(
-            "3. Platelet Count (10⁹/L)", 
-            min_value=10.0, max_value=600.0, value=250.0, step=1.0,
-            help="PLT"
-        )
-        
-        # 4. FSH
-        fsh = st.number_input(
-            "4. Basal FSH (IU/L)", 
-            min_value=0.0, max_value=100.0, value=7.5, step=0.1,
-            help="Follicle-Stimulating Hormone"
-        )
-        
-        # 5. TSH
-        tsh = st.number_input(
-            "5. TSH (mIU/L)", 
-            min_value=0.0, max_value=50.0, value=2.0, step=0.01,
-            help="Thyroid Stimulating Hormone"
-        )
-        
-        st.markdown("---")
-        submitted = st.form_submit_button("🚀 Calculate Risk", use_container_width=True)
+        st.markdown("")
+        submitted = st.form_submit_button("Calculate Risk")
 
 # ==========================================
-# 4. Main Interface: Prediction Logic
+# 4. Main Interface
 # ==========================================
 if submitted:
-    # Construct DataFrame
     input_data = {
         'Female_age': female_age,
         'BMI': bmi,
@@ -163,65 +143,67 @@ if submitted:
     }
     df_input = pd.DataFrame([input_data])
 
-    # Compact Expander: Collapsed by default to save space
-    with st.expander("📋 Click to view input data summary", expanded=False):
-        st.dataframe(df_input, use_container_width=True)
-
     try:
-        # Prediction
+        # 1. Prediction
         prediction_probs = model.predict_proba(df_input)[0]
-        risk_prob = float(prediction_probs[1]) 
+        risk_prob = float(prediction_probs[1])
         
-        # Layout for results
-        col1, col2 = st.columns([2, 1])
+        # 2. Layout: Split Results and Metrics
+        col1, col2 = st.columns([1, 1])
         
         with col1:
-            st.markdown("#### 📊 Analysis Result")
-            
-            # Progress Bar (Compact label)
-            st.caption("Estimated Probability of Early Miscarriage")
-            st.progress(risk_prob)
-            
-            # Logic for status
+            # Determine status style
             if risk_prob > 0.5:
-                card_style = "result-card result-card-high-risk"
-                icon = "⚠️"
-                status = "High Risk"
-                advice = "High risk detected. Close monitoring recommended."
+                status_class = "status-high"
+                status_text = "High Risk"
+                advice = "Close monitoring and evaluation recommended."
             elif risk_prob < 0.2:
-                card_style = "result-card result-card-low-risk"
-                icon = "✅"
-                status = "Low Risk"
-                advice = "Low risk detected. Routine care suggested."
-                st.balloons()
+                status_class = "status-low"
+                status_text = "Low Risk"
+                advice = "Routine prenatal care suggested."
             else:
-                card_style = "result-card result-card-moderate"
-                icon = "⚖️"
-                status = "Moderate Risk"
-                advice = "Intermediate risk. Clinical judgment required."
+                status_class = "status-mod"
+                status_text = "Moderate Risk"
+                advice = "Clinical judgment required."
 
-            # Compact HTML Card
+            # Render Result Card
             st.markdown(f"""
-            <div class="{card_style}">
-                <h3 class="compact-h3">{icon} Prediction: {status}</h3>
-                <h1 class="compact-h1">{risk_prob*100:.2f}%</h1>
-                <p class="compact-p">Probability of Early Miscarriage</p>
-                <hr class="compact-hr">
-                <p class="compact-p"><strong>💡 Suggestion:</strong> {advice}</p>
+            <div class="result-box {status_class}">
+                <div class="result-title">Prediction Result: {status_text}</div>
+                <div class="result-value">{risk_prob*100:.2f}%</div>
+                <div class="result-desc">Probability of Early Miscarriage</div>
+                <hr style="margin: 10px 0; border-top: 1px solid #eee;">
+                <div class="result-desc"><strong>Suggestion:</strong> {advice}</div>
             </div>
             """, unsafe_allow_html=True)
-        
+
         with col2:
-            st.markdown("#### 📈 Metrics")
-            st.metric(label="Miscarriage Prob.", value=f"{risk_prob:.2%}", delta_color="inverse")
-            st.metric(label="Live Birth Prob.", value=f"{1-risk_prob:.2%}")
+            # Metrics
+            st.markdown("""<div style="padding: 5px;"></div>""", unsafe_allow_html=True) # Spacer
+            c1, c2 = st.columns(2)
+            c1.metric("Miscarriage Prob.", f"{risk_prob:.2%}")
+            c2.metric("Live Birth Prob.", f"{1-risk_prob:.2%}")
+            
+            # Input summary (Compact)
+            with st.expander("Input Data Summary"):
+                st.dataframe(df_input, hide_index=True)
+
+        # 3. SHAP Force Plot
+        st.markdown("#### Individualized Feature Interpretation (SHAP Force Plot)")
+        st.caption("This plot shows how each feature contributes to pushing the risk higher (red) or lower (blue) from the baseline.")
+        
+        # Calculate SHAP values
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(df_input)
+        
+        # Display Force Plot
+        # Note: XGBoost classifiers output log-odds, link="logit" converts it to probability for visualization
+        st_shap(shap.force_plot(explainer.expected_value, shap_values[0], df_input.iloc[0], link="logit"), height=120)
 
     except Exception as e:
-        st.error(f"Error: {str(e)}")
-
+        st.error(f"Calculation Error: {str(e)}")
 else:
-    st.info("👈 Enter data in sidebar and click 'Calculate Risk'.")
+    st.info("Enter clinical data in the sidebar and click 'Calculate Risk'.")
 
-# Compact footer
 st.markdown("---")
-st.caption("⚠️ **Disclaimer:** For research use only. Not for medical diagnosis.")
+st.caption("Disclaimer: For research use only.")
