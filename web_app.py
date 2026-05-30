@@ -182,7 +182,6 @@ if submitted:
             st.markdown("""<div style="padding: 5px;"></div>""", unsafe_allow_html=True) # Spacer
             c1, c2 = st.columns(2)
             c1.metric("Miscarriage Prob.", f"{risk_prob:.2%}")
-            c2.metric("Live Birth Prob.", f"{1-risk_prob:.2%}")
             
             # Input summary (Compact)
             with st.expander("Input Data Summary"):
